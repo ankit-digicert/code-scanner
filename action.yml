@@ -50,8 +50,10 @@ inputs:
 outputs:
   sarif-report:
     description: 'Path to the generated SARIF report'
+    value: ${{ steps.set-outputs.outputs.sarif-report }}
   sbom-report:
     description: 'Path to the generated SBOM report'
+    value: ${{ steps.set-outputs.outputs.sbom-report }}
 
 runs:
   using: 'composite'
@@ -119,6 +121,7 @@ runs:
 
     - name: Set Outputs
       shell: bash
+      id: set-outputs
       run: |
-        echo "sarif-report=${{ inputs.output-sarif }}" >> $GITHUB_OUTPUT
-        echo "sbom-report=${{ inputs.output-sbom }}" >> $GITHUB_OUTPUT
+        echo "sarif-report=${{ inputs.output-sarif }}" >> "$GITHUB_OUTPUT"
+        echo "sbom-report=${{ inputs.output-sbom }}" >> "$GITHUB_OUTPUT"
