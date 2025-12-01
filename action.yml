@@ -1,0 +1,124 @@
+name: 'Trivy Security Scanner'
+description: 'Run Trivy security scanner to generate SARIF and SBOM reports'
+author: 'Your Name'
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  scan-type:
+    description: 'Scan type (fs, image, repo, config)'
+    required: false
+    default: 'fs'
+  scan-target:
+    description: 'Target to scan (path, image name, etc.)'
+    required: false
+    default: '.'
+  severity:
+    description: 'Severities to include (UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL)'
+    required: false
+    default: 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL'
+  format:
+    description: 'Output format for SARIF report'
+    required: false
+    default: 'sarif'
+  output-sarif:
+    description: 'Path to save SARIF report'
+    required: false
+    default: 'trivy-results.sarif'
+  output-sbom:
+    description: 'Path to save SBOM report'
+    required: false
+    default: 'trivy-sbom.json'
+  sbom-format:
+    description: 'SBOM format (cyclonedx, spdx, spdx-json)'
+    required: false
+    default: 'cyclonedx'
+  trivy-version:
+    description: 'Trivy version to use'
+    required: false
+    default: 'latest'
+  skip-dirs:
+    description: 'Comma-separated list of directories to skip'
+    required: false
+    default: ''
+  timeout:
+    description: 'Scan timeout duration'
+    required: false
+    default: '5m'
+
+outputs:
+  sarif-report:
+    description: 'Path to the generated SARIF report'
+  sbom-report:
+    description: 'Path to the generated SBOM report'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install Trivy
+      shell: bash
+      run: |
+        echo "Installing Trivy ${{ inputs.trivy-version }}..."
+        
+        if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+          if [ "${{ inputs.trivy-version }}" == "latest" ]; then
+            wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+            echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
+            sudo apt-get update
+            sudo apt-get install trivy -y
+          else
+            wget https://github.com/aquasecurity/trivy/releases/download/v${{ inputs.trivy-version }}/trivy_${{ inputs.trivy-version }}_Linux-64bit.tar.gz
+            tar zxvf trivy_${{ inputs.trivy-version }}_Linux-64bit.tar.gz
+            sudo mv trivy /usr/local/bin/
+          fi
+        elif [[ "$OSTYPE" == "darwin"* ]]; then
+          brew install aquasecurity/trivy/trivy
+        fi
+        
+        trivy --version
+
+    - name: Run Trivy Scan - Generate SARIF Report
+      shell: bash
+      run: |
+        echo "Running Trivy scan for SARIF report..."
+        
+        SKIP_DIRS_ARG=""
+        if [ -n "${{ inputs.skip-dirs }}" ]; then
+          SKIP_DIRS_ARG="--skip-dirs ${{ inputs.skip-dirs }}"
+        fi
+        
+        trivy ${{ inputs.scan-type }} \
+          --format sarif \
+          --output ${{ inputs.output-sarif }} \
+          --severity ${{ inputs.severity }} \
+          --timeout ${{ inputs.timeout }} \
+          $SKIP_DIRS_ARG \
+          ${{ inputs.scan-target }}
+        
+        echo "SARIF report generated: ${{ inputs.output-sarif }}"
+
+    - name: Run Trivy Scan - Generate SBOM Report
+      shell: bash
+      run: |
+        echo "Running Trivy scan for SBOM report..."
+        
+        SKIP_DIRS_ARG=""
+        if [ -n "${{ inputs.skip-dirs }}" ]; then
+          SKIP_DIRS_ARG="--skip-dirs ${{ inputs.skip-dirs }}"
+        fi
+        
+        trivy ${{ inputs.scan-type }} \
+          --format ${{ inputs.sbom-format }} \
+          --output ${{ inputs.output-sbom }} \
+          --timeout ${{ inputs.timeout }} \
+          $SKIP_DIRS_ARG \
+          ${{ inputs.scan-target }}
+        
+        echo "SBOM report generated: ${{ inputs.output-sbom }}"
+
+    - name: Set Outputs
+      shell: bash
+      run: |
+        echo "sarif-report=${{ inputs.output-sarif }}" >> $GITHUB_OUTPUT
+        echo "sbom-report=${{ inputs.output-sbom }}" >> $GITHUB_OUTPUT
